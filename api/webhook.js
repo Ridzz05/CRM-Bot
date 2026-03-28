@@ -48,6 +48,24 @@ function parseCommaArgs(text) {
   return text.split(',').map((s) => s.trim()).filter(Boolean);
 }
 
+function calculateExpiryDate(startDate, durationStr) {
+  const date = new Date(startDate);
+  const match = durationStr.match(/(\d+)\s*(hari|bulan|tahun|day|month|year)/i);
+  if (!match) return new Date(date.getTime() + 30 * 24 * 60 * 60 * 1000); // Default 30 hari
+
+  const amount = parseInt(match[1]);
+  const unit = match[2].toLowerCase();
+
+  if (unit.startsWith('hari') || unit.startsWith('day')) {
+    date.setDate(date.getDate() + amount);
+  } else if (unit.startsWith('bulan') || unit.startsWith('month')) {
+    date.setMonth(date.getMonth() + amount);
+  } else if (unit.startsWith('tahun') || unit.startsWith('year')) {
+    date.setFullYear(date.getFullYear() + amount);
+  }
+  return date;
+}
+
 // =============================================================================
 // Command: /start
 // =============================================================================
@@ -149,12 +167,14 @@ bot.hears(/^tambah pelanggan\s+(.+)/i, async (ctx) => {
     }
 
     // Insert pelanggan
+    const expiryDate = calculateExpiryDate(new Date(), durasiWaktu);
     const { data, error } = await supabase
       .from('pelanggan')
       .insert({
         nama_pelanggan: namaPelanggan,
         nama_layanan: namaLayanan,
         durasi_waktu: durasiWaktu,
+        tanggal_expired: expiryDate.toISOString(),
       })
       .select()
       .single();
@@ -229,6 +249,44 @@ bot.hears(/^daftar layanan$/i, async (ctx) => {
   } catch (err) {
     console.error('[daftar layanan] Unexpected error:', err);
     return ctx.replyWithHTML('❌ Terjadi kesalahan internal. Coba lagi nanti.');
+  }
+});
+
+// =============================================================================
+// Perintah: cek pelanggan {nama_layanan}
+// =============================================================================
+
+bot.hears(/^cek pelanggan\s+(.+)/i, async (ctx) => {
+  try {
+    const namaLayanan = ctx.match[1].trim();
+    const { data, error } = await supabase
+      .from('pelanggan')
+      .select('*')
+      .eq('nama_layanan', namaLayanan)
+      .order('tanggal_expired', { ascending: true });
+
+    if (error) {
+      console.error('[cek pelanggan] Supabase error:', error);
+      return ctx.replyWithHTML(`❌ Gagal mengambil data.\n<code>${escapeHtml(error.message)}</code>`);
+    }
+
+    if (!data || data.length === 0) {
+      return ctx.replyWithHTML(`📭 Tidak ada pelanggan untuk layanan <b>"${escapeHtml(namaLayanan)}"</b>.`);
+    }
+
+    const list = data.map((p, i) => {
+      const tgl = new Date(p.tanggal_expired).toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' });
+      const diff = new Date(p.tanggal_expired) - new Date();
+      const sisaHari = Math.ceil(diff / (1000 * 60 * 60 * 24));
+      const status = sisaHari < 0 ? '❌ EXPIRED' : sisaHari <= 3 ? '⚠️ SEGERA' : '✅ AKTIF';
+      
+      return `${i + 1}. <b>${escapeHtml(p.nama_pelanggan)}</b>\n   📅 Exp: ${tgl} (${sisaHari} hari) [${status}]`;
+    }).join('\n\n');
+
+    return ctx.replyWithHTML(`📋 <b>Pelanggan Layanan: ${escapeHtml(namaLayanan)}</b>\n\n${list}`);
+  } catch (err) {
+    console.error('[cek pelanggan] Unexpected error:', err);
+    return ctx.replyWithHTML('❌ Terjadi kesalahan internal.');
   }
 });
 
