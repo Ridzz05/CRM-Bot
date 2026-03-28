@@ -44,14 +44,8 @@ function escapeHtml(text) {
     .replace(/>/g, '&gt;');
 }
 
-function parseQuotedArgs(text) {
-  const result = [];
-  const regex = /"([^"]+)"|(\S+)/g;
-  let match;
-  while ((match = regex.exec(text)) !== null) {
-    result.push(match[1] || match[2]);
-  }
-  return result;
+function parseCommaArgs(text) {
+  return text.split(',').map((s) => s.trim()).filter(Boolean);
 }
 
 // =============================================================================
@@ -68,11 +62,10 @@ bot.start((ctx) => {
       `<code>tambah layanan [nama layanan]</code>\n` +
       `Contoh: <code>tambah layanan Internet Fiber</code>\n\n` +
       `👤 <b>Tambah Pelanggan</b>\n` +
-      `<code>tambah pelanggan [nama] [layanan] [durasi]</code>\n` +
-      `Contoh: <code>tambah pelanggan "Budi" "Internet Fiber" "30 Hari"</code>\n\n` +
+      `<code>tambah pelanggan [nama], [layanan], [durasi]</code>\n` +
+      `Contoh: <code>tambah pelanggan Yanto, Internet Fiber, 30 Hari</code>\n\n` +
       `📋 <b>Daftar Layanan</b>\n` +
-      `<code>daftar layanan</code>\n\n` +
-      `💡 Gunakan tanda kutip <code>"..."</code> untuk nilai yang mengandung spasi.`
+      `<code>daftar layanan</code>`
   );
 });
 
@@ -127,14 +120,14 @@ bot.hears(/^tambah layanan\s+(.+)/i, async (ctx) => {
 bot.hears(/^tambah pelanggan\s+(.+)/i, async (ctx) => {
   try {
     const rawText = ctx.match[1].trim();
-    const parsed = parseQuotedArgs(rawText);
+    const parsed = parseCommaArgs(rawText);
 
     if (parsed.length < 3) {
       return ctx.replyWithHTML(
         `⚠️ <b>Argumen tidak lengkap!</b>\n\n` +
           `Dibutuhkan 3 argumen: <b>nama</b>, <b>layanan</b>, <b>durasi</b>.\n` +
-          `Gunakan tanda kutip <code>"..."</code> untuk nilai yang mengandung spasi.\n\n` +
-          `Contoh: <code>tambah pelanggan "Budi Santoso" "Internet Fiber" "30 Hari"</code>`
+          `Pisahkan dengan tanda koma.\n\n` +
+          `Contoh: <code>tambah pelanggan Yanto, Internet Fiber, 30 Hari</code>`
       );
     }
 
